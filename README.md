@@ -1,38 +1,113 @@
 
-# NimbleIO Project
+# BaseIO Project
 
-NimbleIO是基于Java NIO开发的一款可快速构建网络通讯项目的异步IO框架，其以简单易用的API和优良的性能深受开发者喜爱。
+[![Website](https://img.shields.io/badge/website-generallycloud-green.svg)](https://www.generallycloud.com)
+[![Maven central](https://img.shields.io/badge/maven%20central-3.2.2.RELEASE-green.svg)](http://mvnrepository.com/artifact/com.generallycloud/baseio-all)
+[![License](https://img.shields.io/badge/License-Apache%202.0-585ac2.svg)](https://github.com/generallycloud/baseio/blob/master/LICENSE.txt)
 
-## 如何使用
+BaseIO is an io framework which can build network project fast, it based on java nio/aio, it is popular with Developers because of simple and easy of use APIs and high-performance.
 
-	
+## Features
 
-	详见 {nimbleio-test}
+ * easy to support reconnect (easy to support heart beat)
+ * simple application container
+   * simple hot deploy , eg: https://www.generallycloud.com/system-redeploy
+   * support deploy http , micro service (depend on your protocol)
+ * easy to supprot load balance, known:
+   * virtual node based on hash
+   * loop balance node 
+ * support protocol extend, known:
+   * Redis protocol, for detail {baseio-test}
+   * Protobuf protocol, for detail {baseio-test}
+   * LineBased protocol, for detail {baseio-test}
+   * FixedLength protocol, for detail {baseio-test}
+   * HTTP1.1 protocol, for detail: https://www.generallycloud.com/
+   * WebSocket protocol, for detail: https://www.generallycloud.com/web-socket/chat/index.html 
+   * Protobase(custom) support text and binay and text binay mixed transfer, for detail {baseio-test}
+ * load test
+   * over 200W QPS (Http1.1,I7-4790,16.04.1-Ubuntu)  [wrk load test](/baseio-documents/load-test/load-test-http.txt)
+ 
+## Quick Start
 
-## 项目特色
+ * Maven Dependency
 
-* IO读写分离
-* 支持内存池
-* 支持内存0拷贝
-* 轻松实现心跳机制
-* 轻松实现简易负载均衡
-* 无差别 [服务端/客户端 ] 转换
-* 超过12W QPS(Socket)的处理速度(服务端：I7 *70%,客户端：I5 *100%；百兆网卡IO *70%)
-* 超过 4W QPS(HTTP)  的处理速度(服务端：I7 *30%,客户端：I5 *100%；百兆网卡IO *30%)
-* 弱网络环境下优良的性能表现
-* 支持组件扩展，目前的扩展插件有：
- * 简易MQ，offer msg，poll msg
- * 简易实时UDP通讯，用作音/视频实时交互
- * 简易权限认证系统，用于限制单位时间内API调用次数
-* 支持协议扩展，目前的扩展协议有：
- * HTTP1.1协议（小部分），支持请求动静态内容，上传下载附件（待完善）
- * WebSocket协议（小部分），基于此开发了一套聊天室示例
- * 私有协议（自己定义的协议报文头/协议报文体），支持传输文本和数据流
- * 私有协议（4位字节表示报文长度），支持传输文本
+  ```xml  
+	<dependency>
+		<groupId>com.generallycloud</groupId>
+		<artifactId>baseio-all</artifactId>
+		<version>3.2.2.RELEASE</version>
+	</dependency>  
+  ```
+  
+ * A simple server:
 
-## 演示及用例
-* HTTP Demo：http://www.generallycloud.com/index.html
-* WebSocketChat Demo：http://www.generallycloud.com/web-socket/chat/index.html                                
- （我写的后端，前端https://github.com/socketio/socket.io/ ）
-* 小蝌蚪 Demo：http://www.generallycloud.com/web-socket/rumpetroll/index.html                                
- （我写的后端，前端https://github.com/danielmahal/Rumpetroll ）
+  ```Java
+
+    public static void main(String[] args) throws Exception {
+        IoEventHandleAdaptor eventHandleAdaptor = new IoEventHandleAdaptor() {
+            @Override
+            public void accept(SocketSession session, Future future) throws Exception {
+                future.write("yes server already accept your message:");
+                future.write(future.getReadText());
+                session.flush(future);
+            }
+        };
+        SocketChannelContext context = new NioSocketChannelContext(new ServerConfiguration(18300));
+        //use java aio
+        //		SocketChannelContext context = new AioSocketChannelContext(new ServerConfiguration(18300));
+        SocketChannelAcceptor acceptor = new SocketChannelAcceptor(context);
+        context.addSessionEventListener(new LoggerSocketSEListener());
+        context.setIoEventHandleAdaptor(eventHandleAdaptor);
+        context.setProtocolFactory(new FixedLengthProtocolFactory());
+        acceptor.bind();
+    }
+
+  ```
+
+ * A simple client:
+
+  ```Java
+
+    public static void main(String[] args) throws Exception {
+        IoEventHandleAdaptor eventHandleAdaptor = new IoEventHandleAdaptor() {
+            @Override
+            public void accept(SocketSession session, Future future) throws Exception {
+                System.out.println();
+                System.out.println("____________________" + future.getReadText());
+                System.out.println();
+            }
+        };
+        SocketChannelContext context = new NioSocketChannelContext(new ServerConfiguration("localhost", 18300));
+        //use java aio
+        //		SocketChannelContext context = new AioSocketChannelContext(new ServerConfiguration(18300));
+        SocketChannelConnector connector = new SocketChannelConnector(context);
+        context.setIoEventHandleAdaptor(eventHandleAdaptor);
+        context.addSessionEventListener(new LoggerSocketSEListener());
+        context.setProtocolFactory(new FixedLengthProtocolFactory());
+        SocketSession session = connector.connect();
+        FixedLengthFuture future = new FixedLengthFutureImpl(context);
+        future.write("hello server!");
+        session.flush(future);
+        ThreadUtil.sleep(100);
+        CloseUtil.close(connector);
+    }
+
+  ```
+
+###	more samples {baseio-test}
+
+## Sample at website:
+ * HTTP Demo:https://www.generallycloud.com/index.html
+ * WebSocket Chat Demo:https://www.generallycloud.com/web-socket/chat/index.html                                
+  (server based on baseio,client based on: https://github.com/socketio/socket.io/ )
+ * WebSocket Rumpetroll Demo:https://www.generallycloud.com/web-socket/rumpetroll/index.html                                
+  (server based on baseio,client based on:https://github.com/danielmahal/Rumpetroll )
+
+## License
+
+BaseIO is released under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+
+## To learn more, join this QQ group, more java technique can talk at there.
+ * QQ group NO: 540637859
+ * Join by click this link: [![img](http://pub.idqqimg.com/wpa/images/group.png)](http://shang.qq.com/wpa/qunwpa?idkey=2bd71e10d876bb6035fa0ddc6720b5748fc8985cb666e17157d17bcfbd2bdaef)
+ * Scan QR code:<br />  ![image](/baseio-documents/popularize/java-io-group-code-small.png)
